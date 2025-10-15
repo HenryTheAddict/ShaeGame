@@ -1,2 +1,432 @@
-<DOCTYPE=HTML>
-<p>Shae game</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shae Game - How Pretty You Have Been</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(45deg, #ff69b4, #ffc0cb, #ff1493);
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .game-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+            overflow-y: auto;
+            border-right: 3px solid #ff69b4;
+        }
+
+        .game-area {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #gameCanvas {
+            width: 100%;
+            height: 100vh;
+            cursor: crosshair;
+        }
+
+        .stopwatch {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: linear-gradient(45deg, #ff69b4, #ff1493);
+            border-radius: 15px;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .stopwatch h2 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .time-display {
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .stats {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(255, 182, 193, 0.7);
+            border-radius: 10px;
+            border: 2px solid #ff69b4;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            font-weight: bold;
+            color: #8b008b;
+        }
+
+        .upgrades {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .upgrade {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 2px solid #ff69b4;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upgrade:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 15px rgba(255, 105, 180, 0.4);
+        }
+
+        .upgrade.purchased {
+            background: rgba(144, 238, 144, 0.8);
+            border-color: #32cd32;
+        }
+
+        .upgrade.cannot-afford {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .upgrade-title {
+            font-weight: bold;
+            color: #8b008b;
+            margin-bottom: 5px;
+        }
+
+        .upgrade-description {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .upgrade-cost {
+            font-weight: bold;
+            color: #ff1493;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="sidebar">
+            <div class="stopwatch">
+                <h2>How Pretty You Have Been</h2>
+                <div class="time-display" id="timeDisplay">00:00:00</div>
+            </div>
+
+            <div class="stats">
+                <div class="stat-item">
+                    <span>Prettiness Points:</span>
+                    <span id="points">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Points Per Click:</span>
+                    <span id="pointsPerClick">1</span>
+                </div>
+                <div class="stat-item">
+                    <span>Auto Points/sec:</span>
+                    <span id="autoPointsPerSec">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Dots Clicked:</span>
+                    <span id="dotsClicked">0</span>
+                </div>
+            </div>
+
+            <div class="upgrades" id="upgradesList">
+                <!-- Upgrades will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <div class="game-area">
+            <canvas id="gameCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        class ShaeGame {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.startTime = Date.now();
+                this.points = 0;
+                this.pointsPerClick = 1;
+                this.autoPointsPerSecond = 0;
+                this.dotsClicked = 0;
+                this.dots = [];
+                this.centerX = 0;
+                this.centerY = 0;
+                this.dotSpeed = 1;
+                this.dotSpawnRate = 0.02;
+                this.autoClickRate = 0;
+                this.upgrades = this.initializeUpgrades();
+
+                this.resizeCanvas();
+                this.setupEventListeners();
+                this.gameLoop();
+                this.updateStopwatch();
+                this.autoPointsLoop();
+            }
+
+            initializeUpgrades() {
+                return [
+                    {id: 1, title: "Prettier Clicks", description: "Each click gives +1 more point", cost: 10, purchased: false, effect: () => this.pointsPerClick += 1},
+                    {id: 2, title: "Sparkle Vision", description: "Dots spawn 20% faster", cost: 25, purchased: false, effect: () => this.dotSpawnRate *= 1.2},
+                    {id: 3, title: "Beauty Boost", description: "Each click gives +2 more points", cost: 50, purchased: false, effect: () => this.pointsPerClick += 2},
+                    {id: 4, title: "Glimmer Speed", description: "Dots move 25% slower (easier to catch)", cost: 75, purchased: false, effect: () => this.dotSpeed *= 0.75},
+                    {id: 5, title: "Charm Multiplier", description: "Each click gives +3 more points", cost: 125, purchased: false, effect: () => this.pointsPerClick += 3},
+                    {id: 6, title: "Magical Aura", description: "Dots spawn 50% faster", cost: 200, purchased: false, effect: () => this.dotSpawnRate *= 1.5},
+                    {id: 7, title: "Grace Enhancement", description: "Each click gives +5 more points", cost: 300, purchased: false, effect: () => this.pointsPerClick += 5},
+                    {id: 8, title: "Radiant Glow", description: "Dots move 30% slower", cost: 500, purchased: false, effect: () => this.dotSpeed *= 0.7},
+                    {id: 9, title: "Elegance Boost", description: "Each click gives +8 more points", cost: 750, purchased: false, effect: () => this.pointsPerClick += 8},
+                    {id: 10, title: "Dazzling Presence", description: "Dots spawn 75% faster", cost: 1000, purchased: false, effect: () => this.dotSpawnRate *= 1.75},
+                    {id: 11, title: "Beauty Assistant", description: "Generates 1 point per second automatically", cost: 1500, purchased: false, effect: () => this.autoPointsPerSecond += 1},
+                    {id: 12, title: "Charm Helper", description: "Each click gives +10 more points", cost: 2000, purchased: false, effect: () => this.pointsPerClick += 10},
+                    {id: 13, title: "Auto Sparkle", description: "Generates 3 points per second automatically", cost: 3000, purchased: false, effect: () => this.autoPointsPerSecond += 3},
+                    {id: 14, title: "Grace Bot", description: "Auto-clicks dots 1 time per second", cost: 4000, purchased: false, effect: () => this.autoClickRate += 1},
+                    {id: 15, title: "Elegance Engine", description: "Generates 5 points per second automatically", cost: 6000, purchased: false, effect: () => this.autoPointsPerSecond += 5},
+                    {id: 16, title: "Beauty Automation", description: "Auto-clicks dots 2 times per second", cost: 8000, purchased: false, effect: () => this.autoClickRate += 2},
+                    {id: 17, title: "Radiance Generator", description: "Generates 10 points per second automatically", cost: 12000, purchased: false, effect: () => this.autoPointsPerSecond += 10},
+                    {id: 18, title: "Dazzle Clicker", description: "Auto-clicks dots 3 times per second", cost: 15000, purchased: false, effect: () => this.autoClickRate += 3},
+                    {id: 19, title: "Glamour Machine", description: "Generates 20 points per second automatically", cost: 25000, purchased: false, effect: () => this.autoPointsPerSecond += 20},
+                    {id: 20, title: "Sparkle Master", description: "Auto-clicks dots 5 times per second", cost: 35000, purchased: false, effect: () => this.autoClickRate += 5},
+                    {id: 21, title: "Beauty AI Assistant", description: "Generates 35 points per second automatically", cost: 50000, purchased: false, effect: () => this.autoPointsPerSecond += 35},
+                    {id: 22, title: "Charm Overdrive", description: "Auto-clicks dots 8 times per second", cost: 75000, purchased: false, effect: () => this.autoClickRate += 8},
+                    {id: 23, title: "Elegance Turbine", description: "Generates 60 points per second automatically", cost: 100000, purchased: false, effect: () => this.autoPointsPerSecond += 60},
+                    {id: 24, title: "Grace Supercomputer", description: "Auto-clicks dots 12 times per second", cost: 150000, purchased: false, effect: () => this.autoClickRate += 12},
+                    {id: 25, title: "Radiance Reactor", description: "Generates 100 points per second automatically", cost: 250000, purchased: false, effect: () => this.autoPointsPerSecond += 100},
+                    {id: 26, title: "Beauty Quantum Processor", description: "Auto-clicks dots 20 times per second", cost: 400000, purchased: false, effect: () => this.autoClickRate += 20},
+                    {id: 27, title: "Dazzle Fusion Core", description: "Generates 200 points per second automatically", cost: 600000, purchased: false, effect: () => this.autoPointsPerSecond += 200},
+                    {id: 28, title: "Glamour Singularity", description: "Auto-clicks dots 35 times per second", cost: 1000000, purchased: false, effect: () => this.autoClickRate += 35},
+                    {id: 29, title: "Sparkle Dimension", description: "Generates 500 points per second automatically", cost: 1500000, purchased: false, effect: () => this.autoPointsPerSecond += 500},
+                    {id: 30, title: "Charm Universe", description: "Auto-clicks dots 60 times per second", cost: 2500000, purchased: false, effect: () => this.autoClickRate += 60},
+                    {id: 31, title: "Beauty Multiverse", description: "Generates 1000 points per second automatically", cost: 4000000, purchased: false, effect: () => this.autoPointsPerSecond += 1000},
+                    {id: 32, title: "Elegance Infinity", description: "Auto-clicks dots 100 times per second", cost: 6000000, purchased: false, effect: () => this.autoClickRate += 100},
+                    {id: 33, title: "Grace Omnipotence", description: "Generates 2500 points per second automatically", cost: 10000000, purchased: false, effect: () => this.autoPointsPerSecond += 2500},
+                    {id: 34, title: "Radiance Transcendence", description: "Auto-clicks dots 200 times per second", cost: 15000000, purchased: false, effect: () => this.autoClickRate += 200},
+                    {id: 35, title: "Ultimate Beauty Ascension", description: "The game now plays itself completely! Generates 10000 points per second", cost: 25000000, purchased: false, effect: () => {this.autoPointsPerSecond += 10000; this.autoClickRate += 500;}}
+                ];
+            }
+
+            resizeCanvas() {
+                this.canvas.width = this.canvas.offsetWidth;
+                this.canvas.height = this.canvas.offsetHeight;
+                this.centerX = this.canvas.width / 2;
+                this.centerY = this.canvas.height / 2;
+            }
+
+            setupEventListeners() {
+                window.addEventListener('resize', () => this.resizeCanvas());
+                this.canvas.addEventListener('click', (e) => this.handleClick(e));
+
+                // Setup upgrade click handlers
+                document.getElementById('upgradesList').addEventListener('click', (e) => {
+                    const upgradeElement = e.target.closest('.upgrade');
+                    if (upgradeElement && !upgradeElement.classList.contains('purchased') && !upgradeElement.classList.contains('cannot-afford')) {
+                        const upgradeId = parseInt(upgradeElement.dataset.id);
+                        this.buyUpgrade(upgradeId);
+                    }
+                });
+            }
+
+            handleClick(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const clickY = e.clientY - rect.top;
+
+                // Check if clicked on any green dot
+                for (let i = this.dots.length - 1; i >= 0; i--) {
+                    const dot = this.dots[i];
+                    const distance = Math.sqrt((clickX - dot.x) ** 2 + (clickY - dot.y) ** 2);
+
+                    if (distance < dot.radius) {
+                        this.dots.splice(i, 1);
+                        this.points += this.pointsPerClick;
+                        this.dotsClicked++;
+                        this.updateUI();
+                        break;
+                    }
+                }
+            }
+
+            buyUpgrade(upgradeId) {
+                const upgrade = this.upgrades.find(u => u.id === upgradeId);
+                if (upgrade && !upgrade.purchased && this.points >= upgrade.cost) {
+                    this.points -= upgrade.cost;
+                    upgrade.purchased = true;
+                    upgrade.effect();
+                    this.updateUI();
+                    this.renderUpgrades();
+                }
+            }
+
+            spawnDot() {
+                if (Math.random() < this.dotSpawnRate) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = Math.min(this.canvas.width, this.canvas.height) / 2 + 100;
+
+                    const dot = {
+                        x: this.centerX + Math.cos(angle) * distance,
+                        y: this.centerY + Math.sin(angle) * distance,
+                        targetX: this.centerX,
+                        targetY: this.centerY,
+                        radius: 15,
+                        speed: this.dotSpeed
+                    };
+
+                    this.dots.push(dot);
+                }
+            }
+
+            updateDots() {
+                for (let i = this.dots.length - 1; i >= 0; i--) {
+                    const dot = this.dots[i];
+
+                    // Move dot towards center
+                    const dx = dot.targetX - dot.x;
+                    const dy = dot.targetY - dot.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < dot.radius) {
+                        // Dot reached center, remove it
+                        this.dots.splice(i, 1);
+                    } else {
+                        dot.x += (dx / distance) * dot.speed;
+                        dot.y += (dy / distance) * dot.speed;
+                    }
+                }
+            }
+
+            autoClick() {
+                if (this.autoClickRate > 0 && this.dots.length > 0) {
+                    for (let i = 0; i < this.autoClickRate && this.dots.length > 0; i++) {
+                        // Auto-click random dot
+                        const randomIndex = Math.floor(Math.random() * this.dots.length);
+                        this.dots.splice(randomIndex, 1);
+                        this.points += this.pointsPerClick;
+                        this.dotsClicked++;
+                    }
+                }
+            }
+
+            render() {
+                // Clear canvas
+                this.ctx.fillStyle = 'rgba(255, 192, 203, 0.1)';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // Draw center purple dot
+                this.ctx.beginPath();
+                this.ctx.arc(this.centerX, this.centerY, 25, 0, Math.PI * 2);
+                this.ctx.fillStyle = '#8a2be2';
+                this.ctx.fill();
+                this.ctx.strokeStyle = '#4b0082';
+                this.ctx.lineWidth = 3;
+                this.ctx.stroke();
+
+                // Draw green dots
+                this.dots.forEach(dot => {
+                    this.ctx.beginPath();
+                    this.ctx.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
+                    this.ctx.fillStyle = '#32cd32';
+                    this.ctx.fill();
+                    this.ctx.strokeStyle = '#228b22';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.stroke();
+
+                    // Add sparkle effect
+                    this.ctx.beginPath();
+                    this.ctx.arc(dot.x - 5, dot.y - 5, 2, 0, Math.PI * 2);
+                    this.ctx.fillStyle = '#90ee90';
+                    this.ctx.fill();
+                });
+            }
+
+            gameLoop() {
+                this.spawnDot();
+                this.updateDots();
+                this.autoClick();
+                this.render();
+                requestAnimationFrame(() => this.gameLoop());
+            }
+
+            updateStopwatch() {
+                const elapsed = Date.now() - this.startTime;
+                const hours = Math.floor(elapsed / 3600000);
+                const minutes = Math.floor((elapsed % 3600000) / 60000);
+                const seconds = Math.floor((elapsed % 60000) / 1000);
+
+                const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                document.getElementById('timeDisplay').textContent = timeString;
+
+                setTimeout(() => this.updateStopwatch(), 1000);
+            }
+
+            autoPointsLoop() {
+                if (this.autoPointsPerSecond > 0) {
+                    this.points += this.autoPointsPerSecond;
+                    this.updateUI();
+                }
+                setTimeout(() => this.autoPointsLoop(), 1000);
+            }
+
+            updateUI() {
+                document.getElementById('points').textContent = Math.floor(this.points).toLocaleString();
+                document.getElementById('pointsPerClick').textContent = this.pointsPerClick.toLocaleString();
+                document.getElementById('autoPointsPerSec').textContent = this.autoPointsPerSecond.toLocaleString();
+                document.getElementById('dotsClicked').textContent = this.dotsClicked.toLocaleString();
+                this.renderUpgrades();
+            }
+
+            renderUpgrades() {
+                const upgradesList = document.getElementById('upgradesList');
+                upgradesList.innerHTML = '';
+
+                this.upgrades.forEach(upgrade => {
+                    const upgradeDiv = document.createElement('div');
+                    upgradeDiv.className = 'upgrade';
+                    upgradeDiv.dataset.id = upgrade.id;
+
+                    if (upgrade.purchased) {
+                        upgradeDiv.classList.add('purchased');
+                    } else if (this.points < upgrade.cost) {
+                        upgradeDiv.classList.add('cannot-afford');
+                    }
+
+                    upgradeDiv.innerHTML = `
+                        <div class="upgrade-title">${upgrade.title}</div>
+                        <div class="upgrade-description">${upgrade.description}</div>
+                        <div class="upgrade-cost">${upgrade.purchased ? 'OWNED' : 'Cost: ' + upgrade.cost.toLocaleString() + ' points'}</div>
+                    `;
+
+                    upgradesList.appendChild(upgradeDiv);
+                });
+            }
+        }
+
+        // Start the game when page loads
+        window.addEventListener('load', () => {
+            new ShaeGame();
+        });
+    </script>
+</body>
+</html>
